@@ -25,6 +25,8 @@ const STEP_PITCH: Record<string, number> = {
 
 function xml(value: unknown): string {
   return String(value)
+    // MIDI 元数据可能含非法控制字符；仅保留 XML 1.0 可表示的字符。
+    .replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

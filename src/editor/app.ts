@@ -28,8 +28,10 @@ import { MetaData } from "../smufl/smufl";
 import { isPianoMusicXml, loadMusicXml } from "../score/musicxml";
 import { abcToMusicXml } from "../abc/abc2xml";
 import { scoreToJpwabc, scoreToJpwabcWithMeta, type JpwMeta, type JpwRange } from "../score/jpscore";
+import { scoreToMusicXml } from "../score/musicxml-export";
 import { decodeJpwabc, encodeJpwabc, isTauriRuntime } from "./fileio";
 import { MixedPainter } from "../mixed/painter";
+import { Notation } from "../mixed/model";
 import { ScorePlayer, type PlayState, type Sf2PlaybackOptions } from "./player";
 import {
   openSoundfontDirectory,
@@ -186,10 +188,11 @@ export class App {
   textVoiceColoring = true;
   scoreVoiceColoring = false;
   showInvisibleVoiceMarkers = false;
-  mode: "jp" | "mixed" | "recognize" = "jp";
+  mode: "jp" | "staff" | "mixed" | "recognize" = "jp";
   mixedXmlText: string | null = null;
   private _mixedPainter: MixedPainter | null = null;
   private _mixedBtnEl: HTMLButtonElement | null = null;
+  private _staffRelayoutSeq = 0; // 五线谱异步重排的竞态序号（丢弃过期结果）
   // 识别模式：二值图 + 带源图坐标的识别结果（仅 musicpp 本地路产出），供叠加核对。
   private _recogBin: Binary | null = null;
   private _recogScore: RecognizedScore | null = null;
@@ -672,8 +675,9 @@ export class App {
   /** parse -> import -> layout -> render. Returns false on parse failure (text kept). */
   reload(text: string): boolean {
     this.syncScoreSettingsButton();
-    // 混排/识别模式：谱面区显示各自专属视图，编辑文本不重排冲掉它。
-    if (this.mode !== "jp") return true;
+    // 识别模式：谱面区显示识别叠加视图，编辑文本不重排冲掉它。
+    // 五线谱/混排（staff/mixed）模式：由简谱文本驱动，需继续解析并重排。
+    if (this.mode === "recognize") return true;
     if (this._pendingSelectionAnchors === null && this._selectedNotes.length > 0) {
       this._pendingSelectionAnchors = this._selectedNotes.map((selection) =>
         this.selectionAnchor(selection));
@@ -714,6 +718,13 @@ export class App {
         console.error("slash-score import failed", e);
         return false;
       }
+    }
+
+    // 五线谱/混排模式：简谱文本 → Score → MusicXML → 异步重排。
+    if (this._isStaffView()) {
+      this._relayoutStaffFromScore(score);
+      this.previewDirty = false;
+      return true;
     }
 
     this.painter.score = score;
@@ -2812,22 +2823,43 @@ export class App {
           return;
         }
         const { score, summary } = midiToScore(parsed, options);
+        const outputFormat = options.outputFormat ?? "staff";
+        // 先完成五线谱排版，失败时保留当前文档。
+        let preparedXml: string | null = null;
+        let preparedPainter: MixedPainter | null = null;
+        if (outputFormat === "staff" || outputFormat === "mixed") {
+          preparedXml = scoreToMusicXml(score);
+          preparedPainter = new MixedPainter();
+          preparedPainter.hideBarNumber = this.mixedHideBarNumber;
+          preparedPainter.notation = outputFormat === "staff" ? Notation.Normal : Notation.Mixed;
+          await preparedPainter.load(preparedXml);
+        }
         this._clearRecognition();
         this.mixedXmlText = null;
         this._mixedPainter = null;
         if (this._mixedBtnEl) this._mixedBtnEl.disabled = true;
-        if (this.mode === "mixed") {
+        if (this._isStaffView()) {
           this.mode = "jp";
-          this._setMixedLayout(false);
-          if (this._mixedBtnEl) this._mixedBtnEl.textContent = "混排";
+          this._updateMixedBtnLabel();
         }
         this.filePath = null;
-        const outputFormat = options.outputFormat ?? "jpw";
         if (outputFormat === "jpw") {
           const { text, meta } = scoreToJpwabcWithMeta(score);
           this._lastImportMeta = meta;
           this._applyImportedJp(text);
           this._disablePhrase();
+        } else if (outputFormat === "staff" || outputFormat === "mixed") {
+          // 保留简谱文本供切换，右侧直接使用已排版的 MusicXML SVG。
+          const { text, meta } = scoreToJpwabcWithMeta(score);
+          this._lastImportMeta = meta;
+          this._applyImportedJp(text);
+          this._disablePhrase();
+          this.mixedXmlText = preparedXml;
+          this._mixedPainter = preparedPainter;
+          if (this._mixedBtnEl) this._mixedBtnEl.disabled = false;
+          this.mode = outputFormat;
+          this._updateMixedBtnLabel();
+          await this._renderMixedPages(true);
         } else {
           const slashBraceMode = options.slashBraceMode ?? (analysis.arpeggioGroupCount > 0 ? "arpeggio" : "grace");
           const slashBracketMode = options.slashBracketMode ?? "triplet";
@@ -2885,7 +2917,11 @@ export class App {
           `忽略事件${summary.ignoredEvents}个`,
           outputFormat === "jpw"
             ? "JPW 简谱"
-            : `${score.parts.length > 1 ? `${Math.min(MAX_SLASH_VOICES, score.parts.length)}声部完整排版` : "单谱表"}${outputFormat === "keyboard" ? "键盘谱" : "数字谱"}`,
+            : outputFormat === "staff"
+              ? "五线谱"
+              : outputFormat === "mixed"
+                ? "五线谱混排"
+                : `${score.parts.length > 1 ? `${Math.min(MAX_SLASH_VOICES, score.parts.length)}声部完整排版` : "单谱表"}${outputFormat === "keyboard" ? "键盘谱" : "数字谱"}`,
         ];
         if (summary.warnings.length) details.push(summary.warnings.join("；"));
         this.setStatus(`MIDI 导入完成：${details.join("，")}`);
@@ -3052,8 +3088,7 @@ export class App {
 
         if (options.outputFormat === "mixed") {
           this.mode = "mixed";
-          this._setMixedLayout(true);
-          if (this._mixedBtnEl) this._mixedBtnEl.textContent = "简谱";
+          this._updateMixedBtnLabel();
           await this._renderMixedPages(true);
         } else if (preparedSlash) {
           this._applyImportedSlash(preparedSlash.text, preparedSlash.options);
@@ -3082,10 +3117,9 @@ export class App {
         this._mixedPainter = null;
         if (this._mixedBtnEl) this._mixedBtnEl.disabled = true;
         this._disablePhrase();
-        if (this.mode === "mixed") {
+        if (this._isStaffView()) {
           this.mode = "jp";
-          this._setMixedLayout(false);
-          if (this._mixedBtnEl) this._mixedBtnEl.textContent = "混排";
+          this._updateMixedBtnLabel();
         }
         this.documentFormat = "jpw";
         this.slashOptions = null;
@@ -3215,10 +3249,9 @@ export class App {
     this.mixedXmlText = null;
     this._mixedPainter = null;
     if (this._mixedBtnEl) this._mixedBtnEl.disabled = true;
-    if (this.mode === "mixed") {
+    if (this._isStaffView()) {
       this.mode = "jp";
-      this._setMixedLayout(false);
-      if (this._mixedBtnEl) this._mixedBtnEl.textContent = "混排";
+      this._updateMixedBtnLabel();
     } else if (this.mode === "recognize") {
       this.mode = "jp";
       this._setRecognizeLayout(false);
@@ -3245,10 +3278,9 @@ export class App {
       this.mode = "jp";
       this._setRecognizeLayout(false);
       if (this._recognizeBtnEl) this._recognizeBtnEl.textContent = "识别";
-    } else if (this.mode === "mixed") {
+    } else if (this._isStaffView()) {
       this.mode = "jp";
-      this._setMixedLayout(false);
-      if (this._mixedBtnEl) this._mixedBtnEl.textContent = "混排";
+      this._updateMixedBtnLabel();
     }
     if (this._phraseOn) {
       this._phraseOn = false;
@@ -3269,6 +3301,19 @@ export class App {
   /** Register the #btn-mixed element so App can enable/disable it. */
   setMixedBtn(el: HTMLButtonElement): void {
     this._mixedBtnEl = el;
+  }
+
+  /** 当前是否处于五线谱 / 混排视图（由简谱文本驱动重排）。 */
+  private _isStaffView(): boolean {
+    return this.mode === "staff" || this.mode === "mixed";
+  }
+
+  /** 更新混排按钮文字：显示「点击后切换到的下一个视图」（简谱 → 五线谱 → 混排 循环）。 */
+  private _updateMixedBtnLabel(): void {
+    if (!this._mixedBtnEl) return;
+    this._mixedBtnEl.textContent = this.mode === "jp"
+      ? "五线谱"
+      : this.mode === "staff" ? "混排" : "简谱";
   }
 
   /** Register the #btn-recognize element so App can enable/disable it. */
@@ -3299,8 +3344,7 @@ export class App {
       if (this._recognizeBtnEl) this._recognizeBtnEl.textContent = "识别";
       this.reload(this.getText());
     } else {
-      // 从混排切入识别：先退混排布局
-      if (this.mode === "mixed") this._setMixedLayout(false);
+      // 从五线谱/混排切入识别（代码栏保持显示，无需退只读布局）
       this.mode = "recognize";
       this._setRecognizeLayout(true);
       if (this._recognizeBtnEl) this._recognizeBtnEl.textContent = "排版";
@@ -3486,37 +3530,31 @@ export class App {
     }
   }
 
-  /** Toggle between JP mode and Mixed (五线谱+简谱) mode. */
+  /** 三态切换：简谱 → 五线谱 → 混排 循环（均有 MusicXML 源时可用）。 */
   async toggleMixed(): Promise<void> {
     if (!this.mixedXmlText) return;
     this.stopPlayback();
     if (this.mode === "jp") {
-      this.mode = "mixed";
-      this._setMixedLayout(true);
-      if (this._mixedBtnEl) this._mixedBtnEl.textContent = "简谱";
+      this.mode = "staff";
+      this._updateMixedBtnLabel();
       await this._renderMixedPages();
-    } else {
+    } else if (this.mode === "staff") {
+      this.mode = "mixed";
+      this._updateMixedBtnLabel();
+      await this._renderMixedPages();
+    } else if (this.mode === "mixed") {
       this.mode = "jp";
-      this._setMixedLayout(false);
-      if (this._mixedBtnEl) this._mixedBtnEl.textContent = "混排";
+      this._updateMixedBtnLabel();
       this.reload(this.getText());
     }
   }
 
-  /** 设置混排是否隐藏小节号，持久化；当前处于混排模式时立即重排。 */
+  /** 设置五线谱/混排是否隐藏小节号，持久化；当前处于对应视图时立即重排。 */
   async setMixedHideBarNumber(on: boolean): Promise<void> {
     if (this.mixedHideBarNumber === on) return;
     this.mixedHideBarNumber = on;
     this.saveSettings();
-    if (this.mode === "mixed") await this._renderMixedPages();
-  }
-
-  /** Mixed mode: editor read-only + hide the code pane entirely. */
-  private _setMixedLayout(on: boolean): void {
-    this.view.dispatch({
-      effects: this._readOnlyCompartment.reconfigure(EditorState.readOnly.of(on)),
-    });
-    document.getElementById("body")?.classList.toggle("mixed", on);
+    if (this._isStaffView()) await this._renderMixedPages();
   }
 
   private async _renderMixedPages(alreadyLoaded = false): Promise<void> {
@@ -3524,6 +3562,7 @@ export class App {
       this._mixedPainter = new MixedPainter();
     }
     this._mixedPainter.hideBarNumber = this.mixedHideBarNumber;
+    this._mixedPainter.notation = this.mode === "staff" ? Notation.Normal : Notation.Mixed;
     if (this.mixedXmlText && !alreadyLoaded) {
       await this._mixedPainter.load(this.mixedXmlText);
     }
@@ -3544,6 +3583,27 @@ export class App {
       this.pageEls.push(wrap);
     }
     this.pageIndex = 0;
+  }
+
+  /** 五线谱/混排模式：由简谱文本解析出的 Score 重新生成 MusicXML 并异步重排（带竞态保护）。 */
+  private _relayoutStaffFromScore(score: Score): void {
+    const seq = ++this._staffRelayoutSeq;
+    const notation = this.mode === "staff" ? Notation.Normal : Notation.Mixed;
+    void (async () => {
+      try {
+        const xml = scoreToMusicXml(score);
+        const painter = new MixedPainter();
+        painter.hideBarNumber = this.mixedHideBarNumber;
+        painter.notation = notation;
+        await painter.load(xml);
+        if (seq !== this._staffRelayoutSeq || !this._isStaffView()) return;
+        this.mixedXmlText = xml;
+        this._mixedPainter = painter;
+        await this._renderMixedPages(true);
+      } catch (e) {
+        console.error("staff relayout failed", e);
+      }
+    })();
   }
 
   /** 记住上次打开/保存的文件路径（仅 Tauri：浏览器路径不可复读）。 */

@@ -2329,9 +2329,17 @@ export class SysStaff {
     for (let m = first; m < first + cnt; m++) {
       const mea = pt.measures[m];
       for (const ch of mea.chords) {
+        if (ch.rest) continue;
+        // 符干向上的符干末端（最高点）
         if (fLt(ch.noteType, new Fraction(4)) && ch.stemUp) {
           let y = ch.tailY(true);
           if (ch.notations.length) y -= 20;
+          if (y < miny) miny = y;
+        }
+        // 符头位置：覆盖符干向下/无符干的高音与加线音符（符头可能高于符干末端）。
+        // -6 为符头半高，确保简谱层避开符头顶部而非仅符头中心。
+        for (const nt of ch.notes) {
+          const y = ch.measure.staffY(nt.staff) + nt.cy() - 6;
           if (y < miny) miny = y;
         }
       }
@@ -2710,7 +2718,7 @@ export const JP_FONT_FAMILY = "Source Han Sans SC, PingFang SC, Microsoft YaHei,
 export class MixedOptions {
   // Engraver（model.hpp:1049）常量原样照搬
   mixStaffHeight = 30;
-  mixStaffDist = 5;
+  mixStaffDist = 9;
   octaveDotDist = 6;
   addOctaveJpForKeyA = false;
   beamDistJP = 5;

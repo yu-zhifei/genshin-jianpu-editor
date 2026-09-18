@@ -98,9 +98,11 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
     }
     const outputFormat = document.createElement("select");
     outputFormat.append(
-      option("jpw", "JPW 简谱（完整排版）", true),
+      option("staff", "五线谱（SVG）", true),
+      option("jpw", "JPW 简谱（完整排版）"),
       option("keyboard", "键盘谱文本（完整排版）"),
       option("number", "数字谱文本（完整排版）"),
+      option("mixed", "五线谱混排（完整排版）"),
     );
     const keyboardKeyLabels = document.createElement("input");
     keyboardKeyLabels.type = "checkbox";
@@ -418,6 +420,14 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
     const hint = document.createElement("div");
     hint.className = "modal-hint";
     const updateHint = () => {
+      if (outputFormat.value === "staff") {
+        hint.textContent = "导入后右侧直接显示纯五线谱 SVG，不叠加简谱数字；仍可通过工具栏切换到简谱或混排。MIDI 将按所选量化与声部设置转谱。";
+        return;
+      }
+      if (outputFormat.value === "mixed") {
+        hint.textContent = "五线谱混排会把 MIDI 转谱结果按五线谱与简谱混合排版；导入后可在「简谱 / 五线谱 / 混排」三种视图间切换。";
+        return;
+      }
       hint.textContent = outputFormat.value === "jpw"
         ? scoreMode.value === "ensemble"
           ? "每条已分配轨道会生成独立声部；同一乐器的声部从上到下排列，所有乐器共享小节与节奏横坐标。"
@@ -429,7 +439,7 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
     const cancel = document.createElement("button");
     cancel.textContent = "取消";
     const confirm = document.createElement("button");
-    confirm.textContent = "导入并转为简谱";
+    confirm.textContent = "导入并显示五线谱";
     footer.append(cancel, confirm);
     box.append(heading, info, histogram, liveGestureCounts, warning, controls, slashGroups, mapping, metadata, advanced, hint, footer);
     overlay.append(box);
@@ -440,11 +450,12 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
     overlay.onclick = (event) => { if (event.target === overlay) close(null); };
     const updateStructure = (): void => {
       const ensemble = scoreMode.value === "ensemble";
+      const slashFormat = outputFormat.value === "keyboard" || outputFormat.value === "number";
       mapping.hidden = !ensemble;
       handRow.hidden = ensemble;
       splitRow.hidden = ensemble;
       instrumentRow.hidden = ensemble;
-      slashGroups.hidden = outputFormat.value === "jpw";
+      slashGroups.hidden = !slashFormat;
       keyboardKeyLabelsRow.hidden = outputFormat.value !== "keyboard";
       keyboardKeyLabelsRow.style.display = outputFormat.value === "keyboard" ? "" : "none";
       const tieOptionsVisible =
@@ -453,16 +464,16 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
       keyboardTieAsZeroRow.style.display = tieOptionsVisible ? "" : "none";
       keyboardHideTieLabelsRow.hidden = !tieOptionsVisible;
       keyboardHideTieLabelsRow.style.display = tieOptionsVisible ? "" : "none";
-      orderingRow.hidden = false;
+      orderingRow.hidden = !slashFormat;
       mapping.style.display = ensemble ? "" : "none";
       handRow.style.display = ensemble ? "none" : "";
       splitRow.style.display = ensemble ? "none" : "";
       instrumentRow.style.display = ensemble ? "none" : "";
-      slashOrdering.disabled = outputFormat.value === "jpw";
-      orderingRow.style.opacity = outputFormat.value === "jpw" ? "0.5" : "1";
-      orderingRow.title = outputFormat.value === "jpw"
-        ? "切换为键盘谱或数字谱后可设置四种和弦书写顺序"
-        : "";
+      slashOrdering.disabled = !slashFormat;
+      orderingRow.style.opacity = slashFormat ? "1" : "0.5";
+      orderingRow.title = slashFormat
+        ? ""
+        : "切换为键盘谱或数字谱后可设置四种和弦书写顺序";
       if (!ensemble) splitRow.style.opacity = hands.value === "single" ? "0.45" : "1";
       updateHint();
     };
@@ -492,6 +503,11 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
     outputFormat.onchange = () => {
       updateStructure();
       updateHint();
+      confirm.textContent = outputFormat.value === "staff"
+        ? "导入并显示五线谱"
+        : outputFormat.value === "mixed"
+          ? "导入并转为五线谱混排"
+          : "导入并转为简谱";
     };
     confirm.onclick = () => {
       const trackAssignments = collectTrackAssignments();

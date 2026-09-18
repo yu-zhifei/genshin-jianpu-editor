@@ -216,10 +216,6 @@ body.file-drag-active #app::after {
 }
 #body.code-pane-collapsed #code-pane { display: none; }
 
-/* Mixed mode is read-only render; hide the code editor entirely. */
-#body.mixed #code-pane,
-#body.mixed #code-pane-toggle { display: none; }
-
 /* 识别模式：左侧代码区保留可编辑（无需隐藏）。二值底图与识别叠加均衡显示，便于对位核对。 */
 .omr-recognize { background: #fff; }
 .omr-recognize > image { opacity: 1; }

@@ -23,22 +23,22 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * - Move harmonies to harmonyY
  * - Scale P2 lyric font × 0.8
  */
-export function formatMixedScore(score: MixedScore): void {
+export function formatMixedScore(score: MixedScore, notation: Notation = Notation.Mixed): void {
   if (score.parts.length === 0) return;
 
-  const p = score.parts[0];
-  if (p.staves.length === 0) return;
+  // 给所有声部的所有谱表设记谱法，并对每个声部计算混排 y 位置（所有声部都混排简谱）。
+  for (const p of score.parts) {
+    if (p.staves.length === 0) continue;
+    for (const st of p.staves) {
+      st.notation.set(new Fraction(0), notation);
+    }
+    p.calcMixedStaffY();
+  }
 
-  // Set Mixed notation for first staff from tick 0
-  p.staves[0].notation.set(new Fraction(0), Notation.Mixed);
-
-  // Calculate mixed staff y positions (needs chords/slurs in place)
-  p.calcMixedStaffY();
-
-  // Move harmony y to harmonyY
+  // Move harmony y to harmonyY（对所有声部）
   for (const sys of score.systems) {
     for (const st of sys.staves) {
-      if (st.part() !== p) continue;
+      const p = st.part();
       for (const m of sys.measures) {
         const md = p.measures[m.index];
         if (!md) continue;
@@ -51,7 +51,7 @@ export function formatMixedScore(score: MixedScore): void {
 
   // P2 lyric font × 0.8
   const lastPart = score.parts[score.parts.length - 1];
-  if (lastPart !== p && lastPart.pid === "P2") {
+  if (lastPart !== score.parts[0] && lastPart.pid === "P2") {
     const refFont = score.defaults.lyricFont;
     const fnt2 = refFont.scaled(0.8);
     lastPart.setLyricFont(fnt2);
@@ -236,6 +236,8 @@ export class MixedPainter {
   private _pages: Group[] = [];
   /** 隐藏小节号（用户选项）。下次 load 生效。 */
   hideBarNumber = false;
+  /** 记谱法（用户选项）：Normal=纯五线谱 / JianPu=纯简谱 / Mixed=五线谱+简谱混排。下次 load 生效。 */
+  notation: Notation = Notation.Mixed;
 
   /** Width of one page in tenths. */
   get pageWidthTenths(): number {
@@ -272,7 +274,7 @@ export class MixedPainter {
     const options = new MixedOptions(this.meta);
     options.hideBarNumber = this.hideBarNumber;
     const score = loadMixedXml(xmlText, options);
-    formatMixedScore(score);
+    formatMixedScore(score, this.notation);
     this.score = score;
 
     // M5: flow layout

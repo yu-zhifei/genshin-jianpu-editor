@@ -124,7 +124,7 @@ async function boot() {
     });
   });
   if (!isTauriRuntime()) {
-    for (const id of ["btn-mixed", "btn-recognize", "sel-recog-view", "btn-phrase"]) {
+    for (const id of ["btn-recognize", "sel-recog-view", "btn-phrase"]) {
       const element = document.getElementById(id);
       if (element) element.hidden = true;
     }

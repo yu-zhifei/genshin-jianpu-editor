@@ -2,7 +2,7 @@ import type { Score, TempoBeatUnit } from "../score/score";
 
 export type MidiQuantizeDivision = 4 | 8 | 16 | 32 | 64;
 export type MidiHandMode = "auto" | "single" | "double";
-export type MidiOutputFormat = "jpw" | "keyboard" | "number";
+export type MidiOutputFormat = "jpw" | "keyboard" | "number" | "staff" | "mixed";
 export type MidiScoreMode = "hands" | "ensemble";
 export type MidiSlashGroupMode = "none" | "grace" | "arpeggio" | "triplet" | "subdivide";
 export type MidiSlashOrdering =

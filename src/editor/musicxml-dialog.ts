@@ -16,7 +16,7 @@ import type {
   MidiSlashOrdering,
 } from "../midi";
 
-export type MusicXmlOutputFormat = MidiOutputFormat | "mixed";
+export type MusicXmlOutputFormat = Exclude<MidiOutputFormat, "staff">;
 
 export interface MusicXmlImportOptions {
   outputFormat: MusicXmlOutputFormat;

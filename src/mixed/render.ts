@@ -1884,8 +1884,8 @@ function drawSysStaff(container: Group, sys: Sys, st: SysStaff, ypos: number): v
       }
     }
 
-    // M4: 简谱混排层（只在 Mixed 通知第一 sub-staff 时绘制）
-    if (nota === Notation.Mixed && ps.subIndex === 0) {
+    // M4: 简谱混排层（所有 Mixed 谱表都绘制各自的简谱层）
+    if (nota === Notation.Mixed) {
       const md = ps.part.measures[m.index];
       if (md) {
         const jpOffY = st.minY - eng.mixStaffDist - eng.mixStaffHeight;
