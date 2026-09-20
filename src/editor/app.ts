@@ -720,6 +720,10 @@ export class App {
       }
     }
 
+    // 简谱/键盘谱/数字谱文本均可经 scoreToMusicXml 转五线谱/混排，
+    // 解析成功即启用三态切换按钮（不再依赖已导入的 MusicXML）。
+    if (this._mixedBtnEl) this._mixedBtnEl.disabled = false;
+
     // 五线谱/混排模式：简谱文本 → Score → MusicXML → 异步重排。
     if (this._isStaffView()) {
       this._relayoutStaffFromScore(score);
@@ -3530,18 +3534,28 @@ export class App {
     }
   }
 
-  /** 三态切换：简谱 → 五线谱 → 混排 循环（均有 MusicXML 源时可用）。 */
+  /** 三态切换：简谱 → 五线谱 → 混排 循环（简谱/键盘谱/数字谱均可）。 */
   async toggleMixed(): Promise<void> {
-    if (!this.mixedXmlText) return;
     this.stopPlayback();
     if (this.mode === "jp") {
       this.mode = "staff";
       this._updateMixedBtnLabel();
-      await this._renderMixedPages();
+      if (this.mixedXmlText) {
+        await this._renderMixedPages();
+      } else if (!this.reload(this.getText())) {
+        // 解析失败：回退到简谱模式，避免 mode 已切但谱面未更新。
+        this.mode = "jp";
+        this._updateMixedBtnLabel();
+      }
     } else if (this.mode === "staff") {
       this.mode = "mixed";
       this._updateMixedBtnLabel();
-      await this._renderMixedPages();
+      if (this.mixedXmlText) {
+        await this._renderMixedPages();
+      } else if (!this.reload(this.getText())) {
+        this.mode = "staff";
+        this._updateMixedBtnLabel();
+      }
     } else if (this.mode === "mixed") {
       this.mode = "jp";
       this._updateMixedBtnLabel();
@@ -3566,8 +3580,9 @@ export class App {
     if (this.mixedXmlText && !alreadyLoaded) {
       await this._mixedPainter.load(this.mixedXmlText);
     }
-    // Portrait paper sized from the MusicXML page dimensions.
+    // 页面宽高比取自 MusicXML 页面尺寸；显示宽度上限与简谱页一致（竖版 720 / 横版 960）。
     const aspect = `${this._mixedPainter.pageWidthTenths} / ${this._mixedPainter.pageHeightTenths}`;
+    const maxWidth = this._mixedPainter.pageHeightTenths > this._mixedPainter.pageWidthTenths ? 720 : 960;
     this.scorePane.replaceChildren();
     this.pageEls = [];
     for (let i = 0; i < this._mixedPainter.pageCount; i++) {
@@ -3577,7 +3592,7 @@ export class App {
       const wrap = document.createElement("div");
       wrap.className = "score-page-wrap";
       wrap.style.aspectRatio = aspect;
-      wrap.style.width = "calc(min(620px, 100%) * var(--score-zoom, 1))";
+      wrap.style.width = `calc(min(${maxWidth}px, 100%) * var(--score-zoom, 1))`;
       wrap.appendChild(svg);
       this.scorePane.appendChild(wrap);
       this.pageEls.push(wrap);

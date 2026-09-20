@@ -90,6 +90,12 @@ async function boot() {
   } catch (error) {
     console.warn("启动时读取 SF2 音源失败", error);
   }
+  // 在 mountEditor 之前注册三态切换按钮，使首次 reload 即能启用它（默认简谱文本也可切五线谱/混排）。
+  const mixedBtn = document.getElementById("btn-mixed") as HTMLButtonElement | null;
+  if (mixedBtn) {
+    app.setMixedBtn(mixedBtn);
+    mixedBtn.addEventListener("click", () => void app.toggleMixed());
+  }
   app.mountEditor(codePane, await loadBuiltInSample());
   const win = window as unknown as { __app: App; __mixedPainter: MixedPainter; __omr: unknown; __abc2musicxml: unknown };
   win.__app = app;
@@ -128,11 +134,6 @@ async function boot() {
       const element = document.getElementById(id);
       if (element) element.hidden = true;
     }
-  }
-  const mixedBtn = document.getElementById("btn-mixed") as HTMLButtonElement | null;
-  if (mixedBtn) {
-    app.setMixedBtn(mixedBtn);
-    mixedBtn.addEventListener("click", () => void app.toggleMixed());
   }
   const recognizeBtn = document.getElementById("btn-recognize") as HTMLButtonElement | null;
   if (recognizeBtn) {
