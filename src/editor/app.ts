@@ -295,6 +295,7 @@ export class App {
   private _mixedPainter: MixedPainter | null = null;
   private _mixedBtnEl: HTMLButtonElement | null = null;
   private _staffRelayoutSeq = 0; // 五线谱异步重排的竞态序号（丢弃过期结果）
+  private _staffRelayoutTask: Promise<void> = Promise.resolve(); // 最近一次重排任务，供切换时等待完成
   // 识别模式：二值图 + 带源图坐标的识别结果（仅 musicpp 本地路产出），供叠加核对。
   private _recogBin: Binary | null = null;
   private _recogScore: RecognizedScore | null = null;
@@ -1116,7 +1117,7 @@ export class App {
     this.applySoftDeletedModelState();
     // 保持文本模型与工作区诊断同步，仅将绘制交给五线谱排版器。
     if (this._isStaffView()) {
-      this._relayoutStaffFromScore(score);
+      this._staffRelayoutTask = this._relayoutStaffFromScore(score);
       this.previewDirty = false;
       this.notifyWorkspaceChange();
       return true;
@@ -6623,12 +6624,14 @@ export class App {
     if (this._input.enabled) this.setInputMode(false);
     this.deselect(false);
     this._pendingSelectionAnchors = null;
+    // 进入五线谱/混排时一律按当前简谱文本重新生成 MusicXML：打谱、时值修改和
+    // 软删除等编辑都先写回文本，复用上次缓存的旧谱会让这些修改丢失。
     if (this.mode === "jp") {
       this.mode = "staff";
       this._updateMixedBtnLabel();
-      if (this.mixedXmlText) {
-        await this._renderMixedPages();
-      } else if (!this.reload(this.getText())) {
+      if (this.reload(this.getText())) {
+        await this._staffRelayoutTask;
+      } else {
         // 解析失败：回退到简谱模式，避免 mode 已切但谱面未更新。
         this.mode = "jp";
         this._updateMixedBtnLabel();
@@ -6636,9 +6639,9 @@ export class App {
     } else if (this.mode === "staff") {
       this.mode = "mixed";
       this._updateMixedBtnLabel();
-      if (this.mixedXmlText) {
-        await this._renderMixedPages();
-      } else if (!this.reload(this.getText())) {
+      if (this.reload(this.getText())) {
+        await this._staffRelayoutTask;
+      } else {
         this.mode = "staff";
         this._updateMixedBtnLabel();
       }
@@ -6690,10 +6693,10 @@ export class App {
   }
 
   /** 五线谱/混排模式：由简谱文本解析出的 Score 重新生成 MusicXML 并异步重排（带竞态保护）。 */
-  private _relayoutStaffFromScore(score: Score): void {
+  private _relayoutStaffFromScore(score: Score): Promise<void> {
     const seq = ++this._staffRelayoutSeq;
     const notation = this.mode === "staff" ? Notation.Normal : Notation.Mixed;
-    void (async () => {
+    return (async () => {
       try {
         const xml = scoreToMusicXml(score);
         const painter = new MixedPainter();
