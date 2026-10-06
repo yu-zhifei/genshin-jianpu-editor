@@ -6654,6 +6654,29 @@ export class App {
     this.notifyWorkspaceChange();
   }
 
+  /** 直接切到指定视图（供只读预览等外部入口使用）：简谱 / 五线谱。 */
+  async setViewMode(target: "jianpu" | "staff"): Promise<void> {
+    const want: "jp" | "staff" = target === "staff" ? "staff" : "jp";
+    if (this.mode === want) return;
+    this.stopPlayback();
+    if (this._input.enabled) this.setInputMode(false);
+    this.deselect(false);
+    this._pendingSelectionAnchors = null;
+    this.mode = want;
+    this._updateMixedBtnLabel();
+    if (want === "jp") {
+      this.reload(this.getText());
+    } else if (this.reload(this.getText())) {
+      await this._staffRelayoutTask;
+    } else {
+      // 解析失败：回退到简谱模式，避免 mode 已切但谱面未更新。
+      this.mode = "jp";
+      this._updateMixedBtnLabel();
+    }
+    this.syncScoreSettingsButton();
+    this.notifyWorkspaceChange();
+  }
+
   /** 设置五线谱/混排是否隐藏小节号，持久化；当前处于对应视图时立即重排。 */
   async setMixedHideBarNumber(on: boolean): Promise<void> {
     if (this.mixedHideBarNumber === on) return;

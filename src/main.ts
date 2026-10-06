@@ -6,6 +6,7 @@ import { App } from "./editor/app";
 import { MixedPainter } from "./mixed/painter";
 import { loadBuiltInSample } from "./bootstrap/sample";
 import { wireWorkspace } from "./bootstrap/workspace";
+import { setupPreviewMode } from "./preview-mode";
 import { initializeTheme } from "./ui/theme";
 
 // Use the same Bravura font for measurement and drawing.
@@ -52,6 +53,7 @@ async function boot(): Promise<void> {
   win.__abc2musicxml = import("./abc/abc2xml");
 
   await wireWorkspace(app, scorePane);
+  await setupPreviewMode(app);
   if (app.restoreLastFileOnStartup) await app.tryRestoreLastFile();
 }
 

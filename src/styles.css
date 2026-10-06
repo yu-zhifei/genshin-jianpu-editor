@@ -2360,3 +2360,18 @@ body.file-drag-active #app::after { border-color: var(--purple); color: var(--pu
 .inspector-footer { position: relative; }
 .inspector-dirty-prompt p { margin: 0 0 10px; font-size: 12px; line-height: 1.5; }
 .inspector-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* ---- 只读预览模式（ScoreFlow 侧边栏 iframe 内嵌）---- */
+/* 隐藏全部编辑 UI，仅保留乐谱；由 src/preview-mode.ts 添加 body.preview-mode。 */
+body.preview-mode #app-header,
+body.preview-mode #toolbar,
+body.preview-mode #code-workspace,
+body.preview-mode #code-pane-toggle,
+body.preview-mode #inspector-pane,
+body.preview-mode #score-input-keypad,
+body.preview-mode #statusbar {
+  display: none !important;
+}
+body.preview-mode #body { padding: 0; }
+body.preview-mode #body #score-pane { padding: 16px 12px; }
+
