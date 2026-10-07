@@ -2,11 +2,14 @@
 // 由 URL 查询参数驱动，并通过 postMessage 与父页面通信。
 //   ?readonly=1&src=<musicxml|mid url>&mode=jianpu|staff&theme=light|dark
 // 父页面可发 { type: "export", format } 触发导出（复用 editor/export.ts）。
+// 预览模式下额外注入悬浮播放/停止按钮（仅简谱视图）：按钮在 iframe 内，点击即
+// 真实用户手势，避免自动播放策略拦截音频。
 //
 // 设计约定：不新增渲染逻辑，只做「隐藏编辑 UI + 装载文件 + 通信」。
 
 import type { App } from "./editor/app";
 import { exportByFormat, type ExportFormat } from "./editor/export";
+import type { PlayState } from "./editor/player";
 
 type ViewMode = "jianpu" | "staff";
 
@@ -85,6 +88,36 @@ function isExportFormat(value: unknown): value is ExportFormat {
 }
 
 /**
+ * 简谱模式的悬浮播放/停止按钮。按钮必须位于 iframe 内部，用户点击才算
+ * 真实手势，否则跨源 postMessage 触发的 AudioContext 会被浏览器自动播放
+ * 策略拦截（无法出声）。返回切换视图时用来显隐按钮的函数。
+ */
+function setupPlaybackControl(app: App): (mode: ViewMode) => void {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "preview-playback-toggle";
+  btn.dataset.busy = "false";
+  btn.textContent = "▶ 播放";
+  btn.title = "从头播放";
+
+  btn.addEventListener("click", () => app.togglePlayback());
+  app.setPlaybackStateListener((state: PlayState) => {
+    const busy = state === "playing" || state === "loading";
+    btn.dataset.busy = String(busy);
+    btn.disabled = state === "loading";
+    btn.setAttribute("aria-pressed", String(busy));
+    btn.textContent = state === "loading" ? "加载中…" : busy ? "■ 停止" : "▶ 播放";
+    btn.title = busy ? "停止播放" : "从头播放";
+  });
+  document.body.append(btn);
+
+  // 播放仅在简谱（jp）模式可用；五线谱/混排下隐藏按钮。
+  return (mode) => {
+    btn.hidden = mode !== "jianpu";
+  };
+}
+
+/**
  * 在 App 启动完成后调用。仅当 URL 带有 read-only/src 参数时才生效，
  * 否则完全不改变普通编辑器行为。
  */
@@ -96,6 +129,9 @@ export async function setupPreviewMode(app: App): Promise<void> {
   // 与 index.html 的首屏内联脚本一致：挂在 <html> 上（此处为兜底/直接访问时补挂）。
   document.documentElement.classList.add("preview-mode");
 
+  const syncPlaybackMode = setupPlaybackControl(app);
+  syncPlaybackMode(params.mode);
+
   window.addEventListener("message", (event) => {
     const data = event.data as {
       type?: string;
@@ -105,6 +141,7 @@ export async function setupPreviewMode(app: App): Promise<void> {
     } | null;
     if (!data || typeof data.type !== "string") return;
     if (data.type === "setMode" && (data.mode === "jianpu" || data.mode === "staff")) {
+      syncPlaybackMode(data.mode);
       void app.setViewMode(data.mode).then(postRendered);
     } else if (data.type === "setTheme" && (data.theme === "light" || data.theme === "dark")) {
       applyTheme(data.theme);

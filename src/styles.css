@@ -2376,3 +2376,34 @@ html.preview-mode #statusbar {
 html.preview-mode #body { padding: 0; }
 html.preview-mode #body #score-pane { padding: 16px 12px; }
 
+/* 只读预览：简谱模式下的悬浮播放/停止按钮。放在 iframe 内，点击才算真实用户
+   手势，避免跨源 postMessage 触发播放时被浏览器自动播放策略拦截。 */
+.preview-playback-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 88px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--gold-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.preview-playback-toggle:hover { background: var(--gold-hover); }
+.preview-playback-toggle:active { transform: scale(0.97); }
+.preview-playback-toggle[data-busy="true"] { background: var(--purple); color: #fff; }
+.preview-playback-toggle[data-busy="true"]:hover { background: var(--purple-ink); }
+.preview-playback-toggle:disabled { opacity: 0.7; cursor: default; }
+.preview-playback-toggle[hidden] { display: none; }
+

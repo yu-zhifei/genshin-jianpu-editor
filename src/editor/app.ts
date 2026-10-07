@@ -358,6 +358,7 @@ export class App {
   private _player: ScorePlayer | null = null;
   private _playBtnEl: HTMLButtonElement | null = null;
   private _stopBtnEl: HTMLButtonElement | null = null;
+  private _playbackStateListener: ((state: PlayState) => void) | null = null;
   private _previewLockBtnEl: HTMLButtonElement | null = null;
   private _inputModeBtnEl: HTMLButtonElement | null = null;
   private readonly _input = new ScoreInputSession();
@@ -5629,6 +5630,12 @@ export class App {
     el.disabled = true;
   }
 
+  /** 只读预览等外部入口：订阅播放状态变化；传入 null 取消订阅。 */
+  setPlaybackStateListener(listener: ((state: PlayState) => void) | null): void {
+    this._playbackStateListener = listener;
+    listener?.(this._player?.state ?? "stopped");
+  }
+
   private player(): ScorePlayer {
     if (!this._player) {
       this._player = new ScorePlayer(
@@ -5649,6 +5656,7 @@ export class App {
   }
 
   private onPlayState(state: PlayState): void {
+    this._playbackStateListener?.(state);
     const busy = state === "playing" || state === "loading";
     if (this._playBtnEl) {
       this._playBtnEl.disabled = false;
