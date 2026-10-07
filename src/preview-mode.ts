@@ -76,7 +76,8 @@ export async function setupPreviewMode(app: App): Promise<void> {
   if (!params.readonly && !params.src) return;
 
   if (params.theme) applyTheme(params.theme);
-  document.body.classList.add("preview-mode");
+  // 与 index.html 的首屏内联脚本一致：挂在 <html> 上（此处为兜底/直接访问时补挂）。
+  document.documentElement.classList.add("preview-mode");
 
   window.addEventListener("message", (event) => {
     const data = event.data as { type?: string; mode?: string; theme?: string } | null;

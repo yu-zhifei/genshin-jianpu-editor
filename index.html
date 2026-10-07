@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- 只读预览：在首屏渲染前就挂上 preview-mode，避免编辑器界面闪现（FOUC）。
+         ScoreFlow 侧栏 iframe 通过 ?readonly=1&src=... 打开本页。 -->
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("readonly") === "1" || params.get("src")) {
+          document.documentElement.classList.add("preview-mode");
+        }
+      })();
+    </script>
+
     <!-- 跨源隔离垫片：GitHub Pages 无法设响应头，用 SW 客户端补 COOP/COEP 以启用 SharedArrayBuffer
          （onnxruntime-web wasm 多线程，OMR 识别 ~2x）。相对路径以适配子路径部署；Tauri/dev 已原生发头
          → 页面已隔离 → 脚本自动跳过。首次访问会自动多刷新一次。 -->

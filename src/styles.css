@@ -2362,16 +2362,17 @@ body.file-drag-active #app::after { border-color: var(--purple); color: var(--pu
 .inspector-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* ---- 只读预览模式（ScoreFlow 侧边栏 iframe 内嵌）---- */
-/* 隐藏全部编辑 UI，仅保留乐谱；由 src/preview-mode.ts 添加 body.preview-mode。 */
-body.preview-mode #app-header,
-body.preview-mode #toolbar,
-body.preview-mode #code-workspace,
-body.preview-mode #code-pane-toggle,
-body.preview-mode #inspector-pane,
-body.preview-mode #score-input-keypad,
-body.preview-mode #statusbar {
+/* 隐藏全部编辑 UI，仅保留乐谱；由 index.html 内联脚本（首屏前）与 src/preview-mode.ts 添加
+   html.preview-mode，确保不会闪现编辑器界面。 */
+html.preview-mode #app-header,
+html.preview-mode #toolbar,
+html.preview-mode #code-workspace,
+html.preview-mode #code-pane-toggle,
+html.preview-mode #inspector-pane,
+html.preview-mode #score-input-keypad,
+html.preview-mode #statusbar {
   display: none !important;
 }
-body.preview-mode #body { padding: 0; }
-body.preview-mode #body #score-pane { padding: 16px 12px; }
+html.preview-mode #body { padding: 0; }
+html.preview-mode #body #score-pane { padding: 16px 12px; }
 
