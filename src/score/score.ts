@@ -214,14 +214,24 @@ export class MusicCommon {
     return MusicCommon._stepToPitch[st];
   }
 
-  static jpToStep(num: string, basePitch: number): string {
+  static jpToStep(num: string, basePitch: number, fifths?: number): string {
     let res = "C".charCodeAt(0) + (num.charCodeAt(0) - "1".charCodeAt(0));
-    const mod = ((basePitch % 12) + 12) % 12;
-    const delta: Record<number, number> = {
-      0: 0, 2: 1, 3: 2, 4: 2, 5: 3, 7: 4, 8: 5, 9: 5, 10: 6, 11: 6,
-    };
-    if (!(mod in delta)) throw new Error("");
-    res += delta[mod];
+    let delta: number;
+    // 优先按调号的音名取主音字母：同音异名调（如 bD/#C、bG/#F）音高模 12 相同，
+    // 仅凭 basePitch 无法区分，必须借助 fifths 才能得到正确的字母名。
+    if (typeof fifths === "number" && MusicCommon.keys[fifths + 7]) {
+      const keyName = MusicCommon.keys[fifths + 7];
+      delta = MusicCommon.steps.indexOf(keyName.replace(/[b#]/g, "")[0]);
+    } else {
+      const mod = ((basePitch % 12) + 12) % 12;
+      const fallback: Record<number, number> = {
+        0: 0, 1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 5, 9: 5, 10: 6, 11: 6,
+      };
+      if (!(mod in fallback)) throw new Error("");
+      delta = fallback[mod];
+    }
+    if (delta < 0) throw new Error("");
+    res += delta;
     if (res > "G".charCodeAt(0)) res -= 7;
     return String.fromCharCode(res);
   }

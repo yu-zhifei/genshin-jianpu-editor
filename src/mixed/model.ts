@@ -487,6 +487,8 @@ export class MChord {
       if (nt.equals(2)) return GlyphCodes.restHalf;
       if (nt.equals(4)) return GlyphCodes.restWhole;
       if (fEq(nt.timesInt(8), new Fraction(1))) return GlyphCodes.rest32nd;
+      if (fEq(nt.timesInt(16), new Fraction(1))) return GlyphCodes.rest64th;
+      if (fEq(nt.timesInt(32), new Fraction(1))) return GlyphCodes.rest128th;
       console.error("unknown rest type", nt.toString());
       return GlyphCodes.restQuarter;
     }
@@ -505,6 +507,10 @@ export class MChord {
   tailSym(up: boolean): string {
     const nt = this.noteType;
     if (this.rest || fGe(nt, new Fraction(1))) return "";
+    if (fEq(nt.timesInt(32), new Fraction(1)))
+      return up ? GlyphCodes.flag128thUp : GlyphCodes.flag128thDown;
+    if (fEq(nt.timesInt(16), new Fraction(1)))
+      return up ? GlyphCodes.flag64thUp : GlyphCodes.flag64thDown;
     if (fEq(nt.timesInt(8), new Fraction(1)))
       return up ? GlyphCodes.flag32ndUp : GlyphCodes.flag32ndDown;
     if (fEq(nt.timesInt(4), new Fraction(1)))
@@ -1628,7 +1634,9 @@ export class MeasureData {
       if (ch.jpBeamCount() < 1) continue;
       const t = skip.plus(ch.offset);
       const b = Math.floor(t.div(beatSize).toFloat());
-      if (prevBeat !== b) {
+      // skip 为负时首拍的 b 可能等于初始 prevBeat(-1)，此时 jpBeams 仍为空，
+      // 必须强制新建第一组，否则会访问 this.jpBeams[-1] 抛错。
+      if (prevBeat !== b || this.jpBeams.length === 0) {
         const g = new BeamGroup();
         g.jp = true;
         g.chords.push(ch);
