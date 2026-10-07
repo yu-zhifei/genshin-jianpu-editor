@@ -538,3 +538,42 @@ export function showExportDialog(app: App): void {
   };
   document.body.append(overlay);
 }
+
+export type ExportFormat =
+  | "png"
+  | "pdf"
+  | "pptx"
+  | "midi"
+  | "musicxml"
+  | "keyboard"
+  | "number"
+  | "jpw";
+
+/**
+ * 按格式导出当前谱面，供只读预览 iframe 通过 postMessage 调用
+ * （见 src/preview-mode.ts）。与 showExportDialog 的菜单项保持一致；
+ * 混排模式仅支持 PDF（走混排排版）与 MusicXML。
+ */
+export async function exportByFormat(app: App, format: ExportFormat): Promise<void> {
+  if (app.mode === "mixed") {
+    if (format === "pdf") return exportMixedPdf(app);
+    if (format === "musicxml") return exportMusicXml(app);
+    throw new Error("混排谱面仅支持导出 PDF 或 MusicXML");
+  }
+  switch (format) {
+    case "png":
+      return exportAllPagesPng(app);
+    case "pdf":
+      return exportScorePdf(app);
+    case "pptx":
+      return exportPptx(app);
+    case "midi":
+      return exportMidi(app);
+    case "musicxml":
+      return exportMusicXml(app);
+    case "keyboard":
+    case "number":
+    case "jpw":
+      return exportTextScore(app, format);
+  }
+}

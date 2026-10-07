@@ -1,10 +1,12 @@
 // 只读预览模式：供 ScoreFlow 侧边栏通过 iframe 内嵌，复用整套编辑器 App。
 // 由 URL 查询参数驱动，并通过 postMessage 与父页面通信。
 //   ?readonly=1&src=<musicxml|mid url>&mode=jianpu|staff&theme=light|dark
+// 父页面可发 { type: "export", format } 触发导出（复用 editor/export.ts）。
 //
 // 设计约定：不新增渲染逻辑，只做「隐藏编辑 UI + 装载文件 + 通信」。
 
 import type { App } from "./editor/app";
+import { exportByFormat, type ExportFormat } from "./editor/export";
 
 type ViewMode = "jianpu" | "staff";
 
@@ -67,6 +69,21 @@ function postRendered(): void {
   });
 }
 
+const EXPORT_FORMATS: readonly ExportFormat[] = [
+  "png",
+  "pdf",
+  "pptx",
+  "midi",
+  "musicxml",
+  "keyboard",
+  "number",
+  "jpw",
+];
+
+function isExportFormat(value: unknown): value is ExportFormat {
+  return typeof value === "string" && (EXPORT_FORMATS as readonly string[]).includes(value);
+}
+
 /**
  * 在 App 启动完成后调用。仅当 URL 带有 read-only/src 参数时才生效，
  * 否则完全不改变普通编辑器行为。
@@ -80,12 +97,27 @@ export async function setupPreviewMode(app: App): Promise<void> {
   document.documentElement.classList.add("preview-mode");
 
   window.addEventListener("message", (event) => {
-    const data = event.data as { type?: string; mode?: string; theme?: string } | null;
+    const data = event.data as {
+      type?: string;
+      mode?: string;
+      theme?: string;
+      format?: string;
+    } | null;
     if (!data || typeof data.type !== "string") return;
     if (data.type === "setMode" && (data.mode === "jianpu" || data.mode === "staff")) {
       void app.setViewMode(data.mode).then(postRendered);
     } else if (data.type === "setTheme" && (data.theme === "light" || data.theme === "dark")) {
       applyTheme(data.theme);
+    } else if (data.type === "export" && isExportFormat(data.format)) {
+      const format = data.format;
+      void exportByFormat(app, format)
+        .then(() => postToParent("exported", { format }))
+        .catch((error) =>
+          postToParent("export-error", {
+            format,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
     }
   });
 
