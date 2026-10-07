@@ -88,7 +88,7 @@ import {
 import { recognizeImage, recognizeMusicppDetailed, agyAvailable, renderRecognitionSvg, renderRowPopup, renderHeaderPopup, type OmrMethod, type RecogView } from "../omr";
 import type { Binary, RecognizedScore } from "../omr";
 import { analyzeMidi, midiToScore, parseMidi } from "../midi";
-import { showMidiImportDialog } from "./midi-dialog";
+import { buildDefaultMidiImportOptions, showMidiImportDialog } from "./midi-dialog";
 import {
   showImportFailureDialog,
   showMusicXmlImportDialog,
@@ -5851,7 +5851,7 @@ export class App {
   async importBytes(
     bytes: Uint8Array,
     name: string,
-    settings?: { skipMusicXmlDialog?: boolean },
+    settings?: { skipMusicXmlDialog?: boolean; skipMidiDialog?: boolean },
   ): Promise<void> {
     const originalName = name;
     let importKind = classifyImportFile(name);
@@ -5860,7 +5860,10 @@ export class App {
         const parsed = parseMidi(bytes);
         if (!parsed.title) parsed.title = fileStem(name);
         const analysis = analyzeMidi(parsed);
-        const options = await showMidiImportDialog(parsed, analysis, name);
+        // 只读预览不做交互：跳过导入选项弹窗，直接用默认选项。
+        const options = settings?.skipMidiDialog
+          ? buildDefaultMidiImportOptions(parsed, analysis, name)
+          : await showMidiImportDialog(parsed, analysis, name);
         if (!options) {
           this.setStatus("已取消 MIDI 导入");
           return;

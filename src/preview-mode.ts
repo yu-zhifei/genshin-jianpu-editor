@@ -1,6 +1,6 @@
 // 只读预览模式：供 ScoreFlow 侧边栏通过 iframe 内嵌，复用整套编辑器 App。
 // 由 URL 查询参数驱动，并通过 postMessage 与父页面通信。
-//   ?readonly=1&src=<musicxml url>&mode=jianpu|staff&theme=light|dark
+//   ?readonly=1&src=<musicxml|mid url>&mode=jianpu|staff&theme=light|dark
 //
 // 设计约定：不新增渲染逻辑，只做「隐藏编辑 UI + 装载文件 + 通信」。
 
@@ -95,8 +95,11 @@ export async function setupPreviewMode(app: App): Promise<void> {
     const resp = await fetch(params.src);
     if (!resp.ok) throw new Error(`加载乐谱失败（HTTP ${resp.status}）`);
     const bytes = new Uint8Array(await resp.arrayBuffer());
-    // 只读预览不做交互：MusicXML 跳过导入选项弹窗，直接用默认选项。
-    await app.importBytes(bytes, params.fileName, { skipMusicXmlDialog: true });
+    // 只读预览不做交互：MusicXML/MIDI 均跳过导入选项弹窗，直接用默认选项。
+    await app.importBytes(bytes, params.fileName, {
+      skipMusicXmlDialog: true,
+      skipMidiDialog: true,
+    });
     await app.setViewMode(params.mode);
     postRendered();
   } catch (error) {

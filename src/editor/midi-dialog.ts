@@ -588,3 +588,78 @@ export function showMidiImportDialog(parsed: ParsedMidi, analysis: MidiAnalysis,
 function clampPitch(pitch: number): number {
   return Math.max(48, Math.min(72, Number.isFinite(pitch) ? pitch : 60));
 }
+
+/**
+ * 返回与「直接点击确认、不做任何修改」等价的 MIDI 导入选项。
+ * 供只读预览等无交互场景使用，避免弹出导入对话框。
+ */
+export function buildDefaultMidiImportOptions(
+  parsed: ParsedMidi,
+  analysis: MidiAnalysis,
+  fileName: string,
+): MidiImportOptions {
+  const handTrackName = /(?:\brh\b|\blh\b|right|left|右手|左手)/i;
+  const soundingTracks = parsed.tracks.filter((track) => track.noteCount > 0);
+  const looksLikeNamedPiano =
+    soundingTracks.length === 2 && soundingTracks.every((track) => handTrackName.test(track.name));
+  const scoreMode: MidiScoreMode =
+    looksLikeNamedPiano || soundingTracks.length < 3 ? "hands" : "ensemble";
+
+  const trackAssignments: MidiTrackAssignment[] = [];
+  if (scoreMode === "ensemble") {
+    const handNamedTracks = soundingTracks.filter((track) => handTrackName.test(track.name));
+    if (handNamedTracks.length >= 2) {
+      const orderedHands = [...handNamedTracks].sort(
+        (a, b) =>
+          Number(/(?:\blh\b|left|左手)/i.test(a.name)) -
+          Number(/(?:\blh\b|left|左手)/i.test(b.name)),
+      );
+      orderedHands.forEach((track, index) =>
+        trackAssignments.push({ track: track.index, instrumentName: "钢琴", voice: index + 1 }),
+      );
+      for (const track of soundingTracks) {
+        if (!handNamedTracks.includes(track)) {
+          trackAssignments.push({
+            track: track.index,
+            instrumentName: track.name.trim() || `乐器 ${trackAssignments.length + 1}`,
+            voice: 1,
+          });
+        }
+      }
+    } else {
+      soundingTracks.forEach((track, index) =>
+        trackAssignments.push({
+          track: track.index,
+          instrumentName: track.name.trim() || `乐器 ${index + 1}`,
+          voice: 1,
+        }),
+      );
+    }
+  }
+
+  return {
+    quantize: analysis.recommendedQuantize,
+    detectTriplets: true,
+    handMode: "auto",
+    splitPitch: clampPitch(analysis.splitPitch),
+    fifths: analysis.fifths,
+    beats: Math.max(1, Math.min(32, analysis.beats || 4)),
+    beatType: analysis.beatType,
+    tempoBpm: analysis.tempoBpm,
+    tempoBeatUnit: "quarter",
+    title: parsed.title || fileStem(fileName),
+    scoreMode,
+    trackAssignments,
+    outputFormat: "staff",
+    showExplicitRests: true,
+    keyboardKeyLabels: false,
+    keyboardTieAsZero: false,
+    keyboardHideTieLabels: false,
+    slashBraceMode: "arpeggio",
+    slashBracketMode: "triplet",
+    slashBarMode: "none",
+    slashAngleMode: "grace",
+    slashParenMode: "chord",
+    slashOrdering: "pitch-asc",
+  };
+}
