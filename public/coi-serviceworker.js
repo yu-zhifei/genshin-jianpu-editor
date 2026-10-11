@@ -60,6 +60,15 @@ if (typeof window === 'undefined') {
         // Tauri 桌面用 tauri:// 自定义协议，Service Worker 只能注册在 http/https 上 → 直接跳过。
         // 桌面走原生 onnxruntime OCR，本就不需要跨源隔离/多线程，无副作用。
         if (location.protocol !== "http:" && location.protocol !== "https:") return;
+
+        // ScoreFlow 乐谱预览侧栏（?readonly=1 / ?src=）：不注册跨源隔离 SW。
+        // 预览不需要 OMR 多线程；且页面未隔离会触发 SW 首次自刷新（整页加载两遍），
+        // 此处提前退出可消除首屏重载，同时保持「预览服务不带跨源隔离头」的决策。
+        {
+            const previewParams = new URLSearchParams(location.search);
+            if (previewParams.get("readonly") === "1" || previewParams.get("src")) return;
+        }
+
         const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
         window.sessionStorage.removeItem("coiReloadedBySelf");
         const coepDegrading = (reloadedBySelf == "coepdegrade");
